@@ -1,0 +1,32 @@
+name: Refresh orbit data
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"   # 6시간마다 (UTC 기준)
+  workflow_dispatch:         # 수동 실행 버튼
+
+permissions:
+  contents: write
+
+concurrency:
+  group: refresh-tle
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch latest TLE + SATCAT
+        run: bash ci-refresh.sh
+      - name: Commit if changed
+        run: |
+          git config user.name "tle-bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No changes."
+          else
+            git add -A
+            git commit -m "chore: refresh orbit data ($(date -u +%FT%TZ))"
+            git push
+          fi

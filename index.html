@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>SAT Tracking Studio</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="description" content="대한민국 상공 위성·우주정거장 실시간 추적, 달면 통과(트랜싯) 촬영 예보">
+<meta property="og:title" content="SAT Tracking Studio">
+<meta property="og:description" content="천구도·3D 지구에서 ISS·톈궁 등 위성을 실시간 추적하고, 달 앞을 지나는 트랜싯 촬영 시각을 계산합니다.">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<style>
+  :root {
+    --bg: #0b1020;
+    --panel: #131a30;
+    --line: #2a3555;
+    --text: #dde4f5;
+    --dim: #8a94b8;
+    --accent: #ffb347;
+    --iss: #ff5566;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    min-height: 100vh;
+  }
+  header {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+  }
+  header h1 { font-size: 18px; font-weight: 700; margin-right: 8px; }
+  select, button {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 12px; font-size: 14px; cursor: pointer;
+  }
+  select:hover, button:hover { border-color: var(--accent); }
+  #status { font-size: 13px; color: var(--dim); }
+  #searchWrap { position: relative; display: flex; gap: 8px; align-items: center; }
+  #searchWrap input {
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 12px; font-size: 14px; width: 200px;
+  }
+  #searchWrap input:focus { outline: none; border-color: var(--accent); }
+  #searchResults {
+    position: absolute; top: 38px; left: 0; z-index: 10; min-width: 280px;
+    max-height: 320px; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  #searchResults div { padding: 6px 10px; cursor: pointer; font-size: 13px; }
+  #searchResults div:hover { background: rgba(255,179,71,.12); }
+  #searchResults .meta { color: var(--dim); font-size: 11px; }
+  #selInfo a { color: #9fd8ff; }
+  #starsLabel { font-size: 13px; color: var(--dim); cursor: pointer; user-select: none; }
+  .pass { padding: 6px 0; border-bottom: 1px solid rgba(42,53,85,.4); line-height: 1.5; }
+  #legend { font-size: 11px; color: var(--dim); margin-top: 6px; line-height: 1.5; }
+  .mapBtn {
+    margin-top: 4px; padding: 3px 9px; font-size: 12px;
+    background: var(--panel); color: var(--accent);
+    border: 1px solid var(--line); border-radius: 6px; cursor: pointer;
+  }
+  .mapBtn:hover { border-color: var(--accent); }
+  #mapModal {
+    position: fixed; inset: 0; z-index: 100; display: none;
+    background: rgba(4,7,14,.8); align-items: center; justify-content: center;
+  }
+  #mapModal.open { display: flex; }
+  #mapCard {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    width: min(760px, 94vw); max-height: 92vh; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  #mapHead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+  }
+  #mapHead b { font-size: 15px; }
+  #mapClose {
+    background: none; border: none; color: var(--dim); font-size: 22px; cursor: pointer; line-height: 1;
+  }
+  #mapDiv { width: 100%; height: 440px; background: #0b1020; }
+  #mapNote { padding: 10px 16px; font-size: 12px; color: var(--dim); line-height: 1.6; }
+  #mapNote b { color: var(--text); }
+  .leaflet-container { background: #0b1020; }
+  main {
+    display: flex; flex-wrap: wrap; gap: 20px;
+    padding: 20px; align-items: flex-start; justify-content: center;
+  }
+  #chartWrap { position: relative; }
+  canvas { display: block; }
+  #chartWrap canvas { border-radius: 50%; }
+  #modeBtns { display: flex; }
+  #modeBtns button { border-radius: 8px 0 0 8px; }
+  #modeBtns button + button { border-radius: 0 8px 8px 0; border-left: none; }
+  #modeBtns .modeOn { border-color: var(--accent); color: var(--accent); }
+  aside {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; width: 360px; max-width: 95vw;
+  }
+  aside h2 { font-size: 14px; color: var(--dim); margin: 12px 0 6px; font-weight: 600; }
+  aside h2:first-child { margin-top: 0; }
+  #clock { font-size: 20px; font-variant-numeric: tabular-nums; }
+  #obsInfo, #sunInfo { font-size: 13px; color: var(--dim); margin-top: 2px; }
+  #selInfo {
+    font-size: 13px; line-height: 1.6; margin-top: 4px;
+    border-left: 3px solid var(--accent); padding-left: 10px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  th { color: var(--dim); font-weight: 600; text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 4px 6px; border-bottom: 1px solid rgba(42,53,85,.4); font-variant-numeric: tabular-nums; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: rgba(255,179,71,.08); }
+  tbody tr.sel { background: rgba(255,179,71,.15); }
+  .vis { color: #7CFC9A; } .ecl { color: var(--dim); }
+  #empty { color: var(--dim); font-size: 13px; padding: 8px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="appTitle">🛰️ 대한민국 상공 위성 추적기</h1>
+  <div id="modeBtns">
+    <button id="modeSky" class="modeOn">천구도</button>
+    <button id="modeGlobe">3D 지구</button>
+  </div>
+  <select id="exagSel" hidden>
+    <option value="1">고도 1×</option>
+    <option value="3" selected>고도 3×</option>
+    <option value="5">고도 5×</option>
+  </select>
+  <select id="catSel"></select>
+  <select id="citySel"></select>
+  <button id="geoBtn">📍 내 위치</button>
+  <button id="tleBtn">궤도 데이터 새로고침</button>
+  <div id="searchWrap">
+    <select id="countrySel"><option value="">전체 국가</option></select>
+    <input id="searchBox" placeholder="위성 검색 (클릭하면 전체 목록)" autocomplete="off">
+    <div id="searchResults" hidden></div>
+  </div>
+  <label id="starsLabel"><input type="checkbox" id="starsChk" checked> 별자리 표시</label>
+  <button id="langBtn">English</button>
+  <span id="status">데이터 로딩 중…</span>
+</header>
+<main>
+  <div id="chartWrap"><canvas id="sky"></canvas></div>
+  <div id="globeWrap" hidden></div>
+  <aside>
+    <h2 id="clockHdr">현재 시각 (KST)</h2>
+    <div id="clock">--:--:--</div>
+    <div id="obsInfo"></div>
+    <div id="sunInfo"></div>
+    <div id="moonInfo"></div>
+    <h2 id="selHdr">선택한 위성</h2>
+    <div id="selInfo">천구도 위 점이나 아래 목록을 클릭하세요.</div>
+    <div id="legend">─ ─ 회색 점선: 지나온 궤적 (−5분) · ━▶ 주황 실선·화살표: 갈 궤적 (+20분)</div>
+    <h2 id="passHdr">ISS·톈궁 통과 예보 (24시간)</h2>
+    <div id="passList" style="font-size:13px;max-height:200px;overflow-y:auto">계산 중…</div>
+    <h2 id="transitHdr">🌙 달면 통과(트랜싯) 촬영 예보</h2>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+      <select id="transitDays"></select>
+      <button id="transitBtn">계산</button>
+      <span id="transitProg" style="font-size:12px;color:var(--dim)"></span>
+    </div>
+    <div id="transitList" style="font-size:13px;max-height:260px;overflow-y:auto"></div>
+    <h2><span id="aboveTitle">지평선 위 위성</span> <span id="count" style="color:var(--dim);font-weight:400"></span></h2>
+    <div style="max-height:340px;overflow-y:auto">
+      <table>
+        <thead><tr><th id="thName">이름</th><th id="thAlt">고도각</th><th id="thAz">방위각</th><th id="thRange">거리</th><th id="thStatus">상태</th></tr></thead>
+        <tbody id="satTbody"></tbody>
+      </table>
+      <div id="empty" hidden>현재 지평선 위에 추적 대상 위성이 없습니다.</div>
+    </div>
+  </aside>
+</main>
+
+<div id="mapModal">
+  <div id="mapCard">
+    <div id="mapHead"><b id="mapTitle"></b><button id="mapClose">✕</button></div>
+    <div id="mapDiv"></div>
+    <div id="mapNote"></div>
+  </div>
+</div>
+
+<script>
+const D2R = Math.PI / 180, R2D = 180 / Math.PI;
+const EARTH_R = 6371;
+
+const CITIES = [
+  ["서울","Seoul",37.5665,126.9780], ["부산","Busan",35.1796,129.0756], ["인천","Incheon",37.4563,126.7052],
+  ["대구","Daegu",35.8714,128.6014], ["대전","Daejeon",36.3504,127.3845], ["광주","Gwangju",35.1595,126.8526],
+  ["울산","Ulsan",35.5384,129.3114], ["세종","Sejong",36.4800,127.2890], ["수원","Suwon",37.2636,127.0286],
+  ["춘천","Chuncheon",37.8813,127.7298], ["강릉","Gangneung",37.7519,128.8761], ["청주","Cheongju",36.6424,127.4890],
+  ["전주","Jeonju",35.8242,127.1480], ["목포","Mokpo",34.8118,126.3922], ["여수","Yeosu",34.7604,127.6622],
+  ["포항","Pohang",36.0190,129.3435], ["창원","Changwon",35.2280,128.6811], ["제주","Jeju",33.4996,126.5312],
+  ["울릉도","Ulleungdo",37.4844,130.9057],
+];
+
+// ---------- 한/영 UI 문자열 ----------
+let lang = localStorage.getItem("lang") === "en" ? "en" : "ko";
+const I18N = {
+  ko: {
+    title: "🛰️ 대한민국 상공 위성 추적기", langBtn: "English",
+    modeSky: "천구도", modeGlobe: "3D 지구", altOpt: n => `고도 ${n}×`,
+    myLoc: "📍 내 위치", myLocName: "내 위치", refresh: "궤도 데이터 새로고침",
+    searchPh: "위성 검색 (클릭하면 전체 목록)", allCountries: "전체 국가", stars: " 별자리 표시",
+    clockHdr: "현재 시각 (KST)", selHdr: "선택한 위성",
+    passHdr: "ISS·톈궁 통과 예보 (24시간)", aboveTitle: "지평선 위 위성",
+    thName: "이름", thAlt: "고도각", thAz: "방위각", thRange: "거리", thStatus: "상태",
+    legend: "─ ─ 회색 점선: 지나온 궤적 (−5분) · ━▶ 주황 실선·화살표: 갈 궤적 (+20분)",
+    selHint: "천구도 위 점이나 아래 목록을 클릭하세요.",
+    emptyList: "현재 지평선 위에 추적 대상 위성이 없습니다.",
+    fetching: "CelesTrak에서 궤도 데이터 받는 중…",
+    tracking: n => `위성 ${n}개 추적 중`, cachedAt: ts => ` (캐시, ${ts} 기준)`,
+    netErrCache: ts => `네트워크 오류 — ${ts} 캐시 사용 중`,
+    netErrNone: "궤도 데이터를 받지 못했습니다. 네트워크 확인 후 새로고침하세요.",
+    fail3d: "3D 모듈 로딩 실패 — 네트워크를 확인하세요.", locFail: "위치 정보를 가져올 수 없습니다.",
+    dirs: ["북","북동","동","남동","남","남서","서","북서"], N:"북", S:"남", E:"동", W:"서",
+    day: "낮 ☀️", twilight: "박명 🌆", night: "밤 🌙", goodTime: " · 위성 관측 좋은 시간대",
+    sunAlt: "태양 고도", latLbl: "위도", lonLbl: "경도",
+    moonName: "달", below: "지평선 아래", illum: "밝은 면", dirSuffix: "쪽",
+    altLbl: "고도각", azLbl: "방위각", rangeLbl: "거리",
+    phases: ["삭(신월)","초승달","상현달","차오르는 볼록달","보름달","기우는 볼록달","하현달","그믐달"],
+    eclipsedTxt: "지구 그림자 속 (안 보임)", sunlit: "햇빛 반사 중", nakedEye: " — 맨눈 관측 가능성 ↑",
+    belowDetail: "현재 지평선 아래 — 경로는 지평선 위 구간만 표시됩니다.",
+    sunlitS: "햇빛", shadowS: "그림자",
+    moreInfo: "정보 보기", wiki: "위키백과", google: "구글",
+    launched: "발사", period: "궤도 주기", minUnit: "분", incl: "경사각", altKm: "고도",
+    passNone: "앞으로 24시간 내 통과가 없습니다.",
+    maxAlt: "최고 고도각", passVis: "⭐ 맨눈 관측 가능", passNotVis: "낮·지구 그림자",
+    tmrw: "내일 ", tiangong: "톈궁",
+    minFmt: m => `+${m}분`, hourFmt: m => `+${m / 60}시간`,
+    noResults: "결과 없음", more: n => `…외 ${n}개 — 검색어로 좁히세요`,
+    transitHdr: "🌙 달면 통과(트랜싯) 촬영 예보", transitBtn: "계산",
+    transitDaysOpt: n => `${n}일`, transitHint: "버튼을 누르면 현재 위치에서 달 앞을 지나는 ISS·톈궁 시각을 계산합니다 (수 초 소요).",
+  },
+  en: {
+    title: "🛰️ SAT Tracking Studio", langBtn: "한국어",
+    modeSky: "Sky Chart", modeGlobe: "3D Globe", altOpt: n => `Alt ×${n}`,
+    myLoc: "📍 My Location", myLocName: "My location", refresh: "Refresh orbit data",
+    searchPh: "Search satellites (click for list)", allCountries: "All countries", stars: " Constellations",
+    clockHdr: "Current Time (KST)", selHdr: "Selected Satellite",
+    passHdr: "ISS·Tiangong Passes (24 h)", aboveTitle: "Above the Horizon",
+    thName: "Name", thAlt: "Alt", thAz: "Az", thRange: "Range", thStatus: "Status",
+    legend: "─ ─ gray dashed: past track (−5 min) · ━▶ orange + arrows: upcoming track (+20 min)",
+    selHint: "Click a dot on the chart or an item in the list below.",
+    emptyList: "No tracked satellites above the horizon right now.",
+    fetching: "Fetching orbit data from CelesTrak…",
+    tracking: n => `Tracking ${n} satellites`, cachedAt: ts => ` (cached ${ts})`,
+    netErrCache: ts => `Network error — using cache from ${ts}`,
+    netErrNone: "Could not fetch orbit data. Check your network and refresh.",
+    fail3d: "Failed to load 3D module — check your network.", locFail: "Could not get your location.",
+    dirs: ["N","NE","E","SE","S","SW","W","NW"], N:"N", S:"S", E:"E", W:"W",
+    day: "Day ☀️", twilight: "Twilight 🌆", night: "Night 🌙", goodTime: " · good time for satellite spotting",
+    sunAlt: "Sun altitude", latLbl: "lat", lonLbl: "lon",
+    moonName: "Moon", below: "below horizon", illum: "illuminated", dirSuffix: "",
+    altLbl: "Alt", azLbl: "Az", rangeLbl: "Range",
+    phases: ["New Moon","Waxing Crescent","First Quarter","Waxing Gibbous","Full Moon","Waning Gibbous","Last Quarter","Waning Crescent"],
+    eclipsedTxt: "In Earth's shadow (not visible)", sunlit: "Sunlit", nakedEye: " — possibly naked-eye visible",
+    belowDetail: "Currently below the horizon — only above-horizon segments are drawn.",
+    sunlitS: "sunlit", shadowS: "shadow",
+    moreInfo: "More info", wiki: "Wikipedia", google: "Google",
+    launched: "Launched", period: "Period", minUnit: "min", incl: "Inclination", altKm: "Altitude",
+    passNone: "No passes in the next 24 hours.",
+    maxAlt: "Max altitude", passVis: "⭐ Naked-eye visible", passNotVis: "daylight · in shadow",
+    tmrw: "Tmrw ", tiangong: "Tiangong",
+    minFmt: m => `+${m}m`, hourFmt: m => `+${m / 60}h`,
+    noResults: "No results", more: n => `…and ${n} more — refine your search`,
+    transitHdr: "🌙 Lunar Transit (photo) Forecast", transitBtn: "Compute",
+    transitDaysOpt: n => `${n} days`, transitHint: "Press the button to find when the ISS/Tiangong crosses the Moon from your location (takes a few seconds).",
+  },
+};
+const t = k => I18N[lang][k];
+
+// ---------- 위성 카테고리 (CelesTrak 그룹; stations는 항상 포함) ----------
+const CATEGORIES = {
+  bright:   { ko: "🛰️ 밝은 위성 (~170)", en: "🛰️ Bright satellites (~170)", groups: ["visual"] },
+  korea:    { ko: "🇰🇷 한국 위성", en: "🇰🇷 Korean satellites", groups: ["active"], filterOwner: "SKOR" },
+  gnss:     { ko: "📡 항법위성 (GPS 등)", en: "📡 Navigation (GNSS)", groups: ["gnss"] },
+  weather:  { ko: "🌦️ 기상위성", en: "🌦️ Weather satellites", groups: ["weather"] },
+  geo:      { ko: "📺 정지궤도 위성", en: "📺 Geostationary", groups: ["geo"] },
+  starlink: { ko: "⭐ 스타링크 (~8천)", en: "⭐ Starlink (~8k)", groups: ["starlink"] },
+  active:   { ko: "🌍 전체 활동 위성 (~1.2만)", en: "🌍 All active (~12k)", groups: ["active"] },
+};
+let category = CATEGORIES[localStorage.getItem("satCategory")] ? localStorage.getItem("satCategory") : "bright";
+const STATION_RE = /^ISS\b|ZARYA|^CSS\b|TIANHE/;
+const tleUrl = g => `https://celestrak.org/NORAD/elements/gp.php?GROUP=${g}&FORMAT=tle`;
+const CACHE_TTL = 2 * 3600 * 1000; // CelesTrak 부하를 줄이기 위해 2시간 캐시
+
+let sats = [];          // {name, noradId, satrec}
+let observer = { idx: 0, name: CITIES[0][0], lat: CITIES[0][2], lon: CITIES[0][3] };
+let selectedId = null;
+let selectedPath = null; // [{az, el, t}] 또는 null
+let lastFrame = [];      // 클릭 판정용: [{sat, az, el, x, y}]
+let viewMode = "sky";   // "sky" | "globe"
+let trail3D = null;      // 3D 모드 선택 위성 궤적
+
+// ---------- TLE 로딩 ----------
+function parseTLE(text) {
+  const lines = text.split(/\r?\n/).map(l => l.trimEnd()).filter(l => l.length);
+  const out = [];
+  for (let i = 0; i + 2 < lines.length + 1; ) {
+    if (lines[i + 1]?.startsWith("1 ") && lines[i + 2]?.startsWith("2 ")) {
+      const satrec = satellite.twoline2satrec(lines[i + 1], lines[i + 2]);
+      out.push({ name: lines[i].trim(), noradId: String(parseInt(satrec.satnum, 10) || satrec.satnum), satrec });
+      i += 3;
+    } else i += 1;
+  }
+  return out;
+}
+
+// TLE 한 그룹 받기: 실패·비정상 응답이면 2.5초 후 1회 재시도 (CelesTrak 요청 제한 대응)
+async function fetchTle(url, tries = 2) {
+  for (let i = 1; ; i++) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const txt = await r.text();
+      if (!/^1 /m.test(txt)) throw new Error("no TLE data"); // 제한 시 안내문만 오는 경우
+      return txt;
+    } catch (e) {
+      if (i >= tries) throw e;
+      await new Promise(res => setTimeout(res, 2500));
+    }
+  }
+}
+
+// 그룹 텍스트 얻기: ① 로컬 미러(tle/*.txt, 런처가 갱신) ② CelesTrak 직접 ③ 오래된 로컬이라도 사용
+async function getGroupText(g) {
+  let local = null;
+  try {
+    const r = await fetch(`tle/${g}.txt`, { cache: "no-store" });
+    if (r.ok) {
+      const txt = await r.text();
+      if (/^1 /m.test(txt)) {
+        const lm = new Date(r.headers.get("last-modified") || 0).getTime();
+        local = txt;
+        if (Date.now() - lm < 6 * 3600 * 1000) return txt; // 6시간 이내면 바로 사용
+      }
+    }
+  } catch (e) { /* 로컬 미러 없음 (예: 원격 배포) */ }
+  try {
+    return await fetchTle(tleUrl(g));
+  } catch (e) {
+    if (local) return local; // 차단·오프라인이면 오래된 미러라도
+    throw e;
+  }
+}
+
+async function loadTLEs(force) {
+  const statusEl = document.getElementById("status");
+  const cat = CATEGORIES[category];
+  const groups = ["stations", ...cat.groups.filter(g => g !== "stations")];
+  const key = "tle-cache-" + groups.join("+");
+  let texts = null, cachedAt = null;
+  if (!force) {
+    try {
+      const c = JSON.parse(localStorage.getItem(key));
+      if (c && Date.now() - c.time < CACHE_TTL) { texts = c.texts; cachedAt = c.time; }
+    } catch (e) {}
+  }
+  if (!texts) {
+    statusEl.textContent = t("fetching");
+    try {
+      texts = await Promise.all(groups.map(getGroupText));
+      try { localStorage.setItem(key, JSON.stringify({ time: Date.now(), texts })); } catch (e) {}
+    } catch (e) {
+      const c = JSON.parse(localStorage.getItem(key) || "null");
+      if (c) {
+        texts = c.texts; cachedAt = c.time;
+        statusEl.textContent = t("netErrCache")(new Date(c.time).toLocaleString());
+      } else {
+        statusEl.textContent = t("netErrNone") + ` [${e.message}]`;
+        return;
+      }
+    }
+  }
+  applyTLEText(texts);
+  if (cat.filterOwner) {
+    await loadSatMeta(); // 국가 정보가 있어야 거를 수 있음
+    sats = sats.filter(s => STATION_RE.test(s.name) || satMeta[s.noradId]?.owner === cat.filterOwner);
+  } else {
+    loadSatMeta();
+  }
+  afterSatsChanged();
+  statusEl.textContent = t("tracking")(sats.length) +
+    (cachedAt ? t("cachedAt")(new Date(cachedAt).toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB")) : "");
+  scheduleTick();
+  tick();
+}
+
+function applyTLEText(texts) {
+  const seen = new Set();
+  sats = [];
+  for (const txt of texts) for (const s of parseTLE(txt)) {
+    if (!seen.has(s.noradId)) { seen.add(s.noradId); sats.push(s); }
+  }
+}
+
+function afterSatsChanged() {
+  if (!sats.find(s => s.noradId === selectedId)) {
+    const iss = sats.find(s => /^ISS\b|ZARYA/.test(s.name));
+    selectedId = iss ? iss.noradId : null;
+  }
+  selectedPath = null;
+  trail3D = null;
+  if (sats.length) predictPasses();
+  buildCountrySel();
+}
+
+// ---------- 위성 부가정보 (CelesTrak SATCAT: 국가·종류·발사일·궤도) ----------
+const META_KEY = "satmeta-v1";
+let satMeta = {};
+let metaLoading = false;
+const OWNER_KO = {
+  US:"🇺🇸 미국", CIS:"🇷🇺 러시아", PRC:"🇨🇳 중국", JPN:"🇯🇵 일본", ESA:"🇪🇺 ESA(유럽)",
+  FR:"🇫🇷 프랑스", IND:"🇮🇳 인도", UK:"🇬🇧 영국", GER:"🇩🇪 독일", CA:"🇨🇦 캐나다",
+  IT:"🇮🇹 이탈리아", SKOR:"🇰🇷 대한민국", ISS:"🌐 국제(ISS)", ARGN:"🇦🇷 아르헨티나",
+  BRAZ:"🇧🇷 브라질", SPN:"🇪🇸 스페인", NETH:"🇳🇱 네덜란드", SWED:"🇸🇪 스웨덴",
+  TURK:"🇹🇷 튀르키예", UAE:"🇦🇪 UAE", ISRA:"🇮🇱 이스라엘", AUS:"🇦🇺 호주",
+  TWN:"🇹🇼 대만", NOR:"🇳🇴 노르웨이", DEN:"🇩🇰 덴마크", EGYP:"🇪🇬 이집트",
+};
+const OWNER_EN = {
+  US:"🇺🇸 USA", CIS:"🇷🇺 Russia", PRC:"🇨🇳 China", JPN:"🇯🇵 Japan", ESA:"🇪🇺 ESA",
+  FR:"🇫🇷 France", IND:"🇮🇳 India", UK:"🇬🇧 UK", GER:"🇩🇪 Germany", CA:"🇨🇦 Canada",
+  IT:"🇮🇹 Italy", SKOR:"🇰🇷 South Korea", ISS:"🌐 International (ISS)", ARGN:"🇦🇷 Argentina",
+  BRAZ:"🇧🇷 Brazil", SPN:"🇪🇸 Spain", NETH:"🇳🇱 Netherlands", SWED:"🇸🇪 Sweden",
+  TURK:"🇹🇷 Türkiye", UAE:"🇦🇪 UAE", ISRA:"🇮🇱 Israel", AUS:"🇦🇺 Australia",
+  TWN:"🇹🇼 Taiwan", NOR:"🇳🇴 Norway", DEN:"🇩🇰 Denmark", EGYP:"🇪🇬 Egypt",
+};
+const TYPE_KO = { PAY:"위성(탑재체)", "R/B":"로켓 추진체", DEB:"우주 잔해" };
+const TYPE_EN = { PAY:"Payload", "R/B":"Rocket body", DEB:"Debris" };
+const ownerName = code => (lang === "ko" ? OWNER_KO : OWNER_EN)[code] || code || "?";
+const typeName = code => (lang === "ko" ? TYPE_KO : TYPE_EN)[code] || code || "?";
+
+function parseCsvLine(line) {
+  const out = [];
+  let cur = "", inQ = false;
+  for (const ch of line) {
+    if (ch === '"') inQ = !inQ;
+    else if (ch === "," && !inQ) { out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+let metaPromise = null;
+function loadSatMeta() {
+  if (!metaPromise) metaPromise = _loadSatMeta().finally(() => { metaPromise = null; });
+  return metaPromise;
+}
+
+async function _loadSatMeta() {
+  if (!sats.length) return;
+  try {
+    try {
+      const c = JSON.parse(localStorage.getItem(META_KEY));
+      if (c) satMeta = { ...c.map, ...satMeta };
+    } catch (e) {}
+    if (sats.filter(s => !satMeta[s.noradId]).length <= sats.length * 0.02) {
+      buildCountrySel();
+      return;
+    }
+    let txt = null;
+    try { // 로컬 미러 우선 (런처가 주 1회 갱신)
+      const r = await fetch("satcat.csv", { cache: "no-store" });
+      if (r.ok) {
+        const candidate = await r.text();
+        if (candidate.startsWith("OBJECT_NAME")) txt = candidate;
+      }
+    } catch (e) {}
+    if (!txt) {
+      txt = await fetch("https://celestrak.org/pub/satcat.csv").then(r => {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.text();
+      });
+    }
+    const lines = txt.split("\n");
+    const header = parseCsvLine(lines[0].trim());
+    const idx = n => header.indexOf(n);
+    const [cId, cType, cOwner, cLaunch, cPeriod, cIncl, cApo, cPer] =
+      ["NORAD_CAT_ID","OBJECT_TYPE","OWNER","LAUNCH_DATE","PERIOD","INCLINATION","APOGEE","PERIGEE"].map(idx);
+    const want = new Set(sats.map(s => s.noradId));
+    let found = 0;
+    for (let i = 1; i < lines.length && found < want.size; i++) {
+      if (!lines[i]) continue;
+      const f = parseCsvLine(lines[i]);
+      const id = String(parseInt(f[cId], 10));
+      if (!want.has(id)) continue;
+      satMeta[id] = { owner: f[cOwner], type: f[cType], launch: f[cLaunch],
+                      period: f[cPeriod], incl: f[cIncl], apo: f[cApo], per: f[cPer] };
+      found++;
+    }
+    try { localStorage.setItem(META_KEY, JSON.stringify({ time: Date.now(), map: satMeta })); }
+    catch (e) { /* 저장공간 초과 시 캐시 없이 진행 */ }
+    buildCountrySel();
+  } catch (e) { /* 부가정보 없이도 동작 */ }
+}
+
+function buildCountrySel() {
+  const counts = {};
+  for (const s of sats) {
+    const o = satMeta[s.noradId]?.owner;
+    if (o) counts[o] = (counts[o] || 0) + 1;
+  }
+  const sel = document.getElementById("countrySel");
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">${t("allCountries")}</option>` +
+    Object.entries(counts).sort((a, b) => b[1] - a[1])
+      .map(([o, n]) => `<option value="${o}">${ownerName(o)} (${n})</option>`).join("");
+  sel.value = prev;
+}
+
+// ---------- 달 위치·위상 (Schlyter 근사, 오차 ~0.3°) ----------
+const PHASE_EMOJI = ["🌑","🌒","🌓","🌔","🌕","🌖","🌗","🌘"];
+
+function moonData(date, gmst) {
+  const d = date.getTime() / 86400000 + 2440587.5 - 2451543.5;
+  const N = (125.1228 - 0.0529538083 * d) * D2R;
+  const inc = 5.1454 * D2R;
+  const w = (318.0634 + 0.1643573223 * d) * D2R;
+  const a = 60.2666, e = 0.0549;
+  const M = ((115.3654 + 13.0649929509 * d) % 360) * D2R;
+  let E = M + e * Math.sin(M) * (1 + e * Math.cos(M));
+  for (let k = 0; k < 4; k++) E -= (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+  const xv = a * (Math.cos(E) - e), yv = a * Math.sqrt(1 - e * e) * Math.sin(E);
+  const v = Math.atan2(yv, xv), r = Math.hypot(xv, yv);
+  const xh = r * (Math.cos(N) * Math.cos(v + w) - Math.sin(N) * Math.sin(v + w) * Math.cos(inc));
+  const yh = r * (Math.sin(N) * Math.cos(v + w) + Math.cos(N) * Math.sin(v + w) * Math.cos(inc));
+  const zh = r * Math.sin(v + w) * Math.sin(inc);
+  let lon = Math.atan2(yh, xh), lat = Math.atan2(zh, Math.hypot(xh, yh));
+  // 주요 섭동항 (이심·변차·연차 등)
+  const Ms = ((356.0470 + 0.9856002585 * d) % 360) * D2R;
+  const ws = (282.9404 + 4.70935e-5 * d) * D2R;
+  const Ls = Ms + ws, Lm = N + w + M;
+  const Del = Lm - Ls, F = Lm - N;
+  lon += (-1.274 * Math.sin(M - 2 * Del) + 0.658 * Math.sin(2 * Del) - 0.186 * Math.sin(Ms)
+    - 0.059 * Math.sin(2 * M - 2 * Del) - 0.057 * Math.sin(M - 2 * Del + Ms)
+    + 0.053 * Math.sin(M + 2 * Del) - 0.046 * Math.sin(2 * Del - Ms) - 0.041 * Math.sin(M - Ms)
+    - 0.035 * Math.sin(Del) - 0.031 * Math.sin(M + Ms)) * D2R;
+  lat += (-0.173 * Math.sin(F - 2 * Del) - 0.055 * Math.sin(M - F - 2 * Del)
+    - 0.046 * Math.sin(M + F - 2 * Del) + 0.033 * Math.sin(F + 2 * Del) + 0.017 * Math.sin(2 * M + F)) * D2R;
+  // 황도 → 적도 좌표
+  const ecl = (23.4393 - 3.563e-7 * d) * D2R;
+  const xe = Math.cos(lon) * Math.cos(lat), ye = Math.sin(lon) * Math.cos(lat), ze = Math.sin(lat);
+  const ra = Math.atan2(ye * Math.cos(ecl) - ze * Math.sin(ecl), xe);
+  const dec = Math.asin(ye * Math.sin(ecl) + ze * Math.cos(ecl));
+  const aa = raDecToAltAz(ra, dec, gmst);
+  aa.el -= 0.95 * Math.cos(aa.el * D2R); // 시차 보정: 달은 가까워서 지심 좌표보다 ~1° 낮게 보임
+  // 위상: 태양과의 황경 차
+  const sunLon = Ls + (1.915 * Math.sin(Ms) + 0.020 * Math.sin(2 * Ms)) * D2R;
+  const elong = (((lon - sunLon) * R2D) % 360 + 360) % 360;
+  const distKm = r * 6371;
+  return { az: aa.az, el: aa.el, elong, illum: (1 - Math.cos(elong * D2R)) / 2,
+           distKm, angRadDeg: Math.asin(1737.4 / distKm) * R2D };
+}
+
+let moonPathCache = null;
+function getMoonPath(now) {
+  const key = Math.floor(now.getTime() / 60000) + "|" + observer.lat.toFixed(3) + "," + observer.lon.toFixed(3);
+  if (moonPathCache?.key === key) return moonPathCache.pts;
+  const pts = [];
+  for (let dt = -3600; dt <= 7200; dt += 600) {
+    const d = new Date(now.getTime() + dt * 1000);
+    const m = moonData(d, satellite.gstime(d));
+    pts.push({ az: m.az, el: m.el, dt });
+  }
+  moonPathCache = { key, pts };
+  return pts;
+}
+
+// ---------- 태양 위치 (저정밀 근사, 가시성 판정용) ----------
+function sunEci(date) {
+  const jd = date.getTime() / 86400000 + 2440587.5;
+  const n = jd - 2451545.0;
+  const L = (280.460 + 0.9856474 * n) % 360;
+  const g = ((357.528 + 0.9856003 * n) % 360) * D2R;
+  const lam = (L + 1.915 * Math.sin(g) + 0.020 * Math.sin(2 * g)) * D2R;
+  const eps = (23.439 - 0.0000004 * n) * D2R;
+  const R = (1.00014 - 0.01671 * Math.cos(g) - 0.00014 * Math.cos(2 * g)) * 149597870.7;
+  return { x: R * Math.cos(lam), y: R * Math.cos(eps) * Math.sin(lam), z: R * Math.sin(eps) * Math.sin(lam) };
+}
+
+// 원통 그림자 모델: 위성이 지구 그림자 안에 있는지
+function isEclipsed(pos, sun) {
+  const sm = Math.hypot(sun.x, sun.y, sun.z);
+  const ux = sun.x / sm, uy = sun.y / sm, uz = sun.z / sm;
+  const dot = pos.x * ux + pos.y * uy + pos.z * uz;
+  if (dot > 0) return false; // 태양 쪽에 있으면 햇빛 받음
+  const r2 = pos.x ** 2 + pos.y ** 2 + pos.z ** 2;
+  return Math.sqrt(r2 - dot * dot) < EARTH_R;
+}
+
+// ---------- 별자리 배경 (d3-celestial 공개 데이터) ----------
+let stars = null, constLines = null, constNames = null;
+const CELESTIAL = "https://cdn.jsdelivr.net/npm/d3-celestial@0.7.35/data/";
+const KCONST = {
+  And:"안드로메다",Ant:"공기펌프",Aps:"극락조",Aqr:"물병",Aql:"독수리",Ara:"제단",Ari:"양",
+  Aur:"마차부",Boo:"목동",Cae:"조각칼",Cam:"기린",Cnc:"게",CVn:"사냥개",CMa:"큰개",CMi:"작은개",
+  Cap:"염소",Car:"용골",Cas:"카시오페이아",Cen:"켄타우루스",Cep:"세페우스",Cet:"고래",Cha:"카멜레온",
+  Cir:"컴퍼스",Col:"비둘기",Com:"머리털",CrA:"남쪽왕관",CrB:"북쪽왕관",Crv:"까마귀",Crt:"컵",
+  Cru:"남십자",Cyg:"백조",Del:"돌고래",Dor:"황새치",Dra:"용",Equ:"조랑말",Eri:"에리다누스",
+  For:"화로",Gem:"쌍둥이",Gru:"두루미",Her:"헤르쿨레스",Hor:"시계",Hya:"바다뱀",Hyi:"물뱀",
+  Ind:"인디언",Lac:"도마뱀",Leo:"사자",LMi:"작은사자",Lep:"토끼",Lib:"천칭",Lup:"이리",
+  Lyn:"살쾡이",Lyr:"거문고",Men:"테이블산",Mic:"현미경",Mon:"외뿔소",Mus:"파리",Nor:"직각자",
+  Oct:"팔분의",Oph:"뱀주인",Ori:"오리온",Pav:"공작",Peg:"페가수스",Per:"페르세우스",Phe:"불사조",
+  Pic:"화가",Psc:"물고기",PsA:"남쪽물고기",Pup:"고물",Pyx:"나침반",Ret:"그물",Sge:"화살",
+  Sgr:"궁수",Sco:"전갈",Scl:"조각가",Sct:"방패",Ser:"뱀",Sex:"육분의",Tau:"황소",Tel:"망원경",
+  Tri:"삼각형",TrA:"남쪽삼각형",Tuc:"큰부리새",UMa:"큰곰",UMi:"작은곰",Vel:"돛",Vir:"처녀",
+  Vol:"날치",Vul:"여우",
+};
+
+async function loadSky() {
+  try {
+    const [s, l, c] = await Promise.all([
+      fetch(CELESTIAL + "stars.6.json").then(r => r.json()),
+      fetch(CELESTIAL + "constellations.lines.json").then(r => r.json()),
+      fetch(CELESTIAL + "constellations.json").then(r => r.json()),
+    ]);
+    stars = s.features
+      .filter(f => f.properties.mag <= 5)
+      .map(f => ({ ra: f.geometry.coordinates[0] * D2R, dec: f.geometry.coordinates[1] * D2R, mag: f.properties.mag }));
+    constLines = l.features.map(f => ({ id: f.id, lines: f.geometry.coordinates }));
+    constNames = c.features.map(f => ({
+      id: f.id, name: f.properties.name, ra: f.geometry.coordinates[0] * D2R, dec: f.geometry.coordinates[1] * D2R,
+      rank: +f.properties.rank || 3,
+    }));
+  } catch (e) { /* 별자리 없이도 동작 */ }
+}
+
+// 적도좌표(RA/Dec) → 지평좌표(방위각/고도각)
+function raDecToAltAz(ra, dec, gmst) {
+  const lat = observer.lat * D2R;
+  const ha = gmst + observer.lon * D2R - ra; // 시간각
+  const sinAlt = Math.sin(dec) * Math.sin(lat) + Math.cos(dec) * Math.cos(lat) * Math.cos(ha);
+  const az = Math.atan2(Math.sin(ha), Math.cos(ha) * Math.sin(lat) - Math.tan(dec) * Math.cos(lat)) * R2D + 180;
+  return { az: (az + 360) % 360, el: Math.asin(sinAlt) * R2D };
+}
+
+// ---------- ISS·톈궁 통과 예보 (24시간) ----------
+let passes = [];
+function predictPasses() {
+  const cats = [
+    { label: "ISS", re: /^ISS\b|ZARYA/ },
+    { label: "CSS", re: /^CSS\b|TIANHE/ },
+  ];
+  const obsGd = observerGd();
+  const start = Date.now();
+  const out = [];
+  for (const cat of cats) {
+    const sat = sats.find(s => cat.re.test(s.name));
+    if (!sat) continue;
+    let cur = null;
+    for (let t = 0; t <= 24 * 3600; t += 30) {
+      const d = new Date(start + t * 1000);
+      const gmst = satellite.gstime(d);
+      const la = lookAnglesAt(sat.satrec, d, gmst, obsGd);
+      if (la && la.el > 0) {
+        if (!cur) cur = { label: cat.label, start: d, startAz: la.az, maxEl: la.el, maxT: d, visible: false };
+        if (la.el > cur.maxEl) { cur.maxEl = la.el; cur.maxT = d; }
+        const sun = sunEci(d);
+        const sunLa = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(sun, gmst));
+        if (!isEclipsed(la.eci, sun) && sunLa.elevation * R2D < -6) cur.visible = true;
+        cur.end = d; cur.endAz = la.az;
+      } else if (cur) { out.push(cur); cur = null; }
+    }
+    if (cur) out.push(cur);
+  }
+  out.sort((a, b) => a.start - b.start);
+  passes = out;
+  renderPasses();
+}
+
+function fmtT(d) {
+  const hm = d.toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB",
+    { hour12: false, hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" });
+  return (d.toDateString() !== new Date().toDateString() ? t("tmrw") : "") + hm;
+}
+
+function renderPasses() {
+  const el = document.getElementById("passList");
+  if (!passes.length) {
+    el.innerHTML = `<span style="color:var(--dim)">${t("passNone")}</span>`;
+    return;
+  }
+  el.innerHTML = passes.map(p =>
+    `<div class="pass">` +
+    `<b style="color:${p.label === "ISS" ? "var(--iss)" : "var(--accent)"}">${p.label === "CSS" ? t("tiangong") : p.label}</b> ` +
+    `${fmtT(p.start)} ${azName(p.startAz)} → ${fmtT(p.end)} ${azName(p.endAz)}<br>` +
+    `<span style="color:var(--dim)">${t("maxAlt")} ${p.maxEl.toFixed(0)}° (${fmtT(p.maxT)})</span> ` +
+    (p.visible ? `<span class="vis">${t("passVis")}</span>` : `<span class="ecl">${t("passNotVis")}</span>`) +
+    `</div>`).join("");
+}
+
+// ---------- 달면 통과(트랜싯) 예보 ----------
+// ISS/톈궁이 관측자 위치에서 달 앞을 가로지르는 순간을 찾는다.
+// 통과는 0.5~1.5초로 짧아 pass 탐지 → 1초 스캔 → 0.05초 refine 3단계로 최근접을 잡는다.
+const TRANSIT_BODIES = [
+  { re: /^ISS\b|ZARYA/, label: "ISS", span: 109 },   // 태양전지판 포함 폭(m)
+  { re: /^CSS\b|TIANHE/, label: "CSS", span: 55 },
+];
+let transitRunning = false, lastTransit = null;
+
+function angSep(az1, el1, az2, el2) {
+  const a1 = el1 * D2R, a2 = el2 * D2R;
+  const c = Math.sin(a1) * Math.sin(a2) + Math.cos(a1) * Math.cos(a2) * Math.cos((az1 - az2) * D2R);
+  return Math.acos(Math.min(1, Math.max(-1, c))) * R2D;
+}
+function sunAltAt(d, g, obsGd) {
+  const la = satellite.ecfToLookAngles(obsGd, satellite.eciToEcf(sunEci(d), g));
+  return la.elevation * R2D;
+}
+function transitSample(satrec, obsGd, baseMs, tSec) {
+  const d = new Date(baseMs + tSec * 1000), g = satellite.gstime(d);
+  const la = lookAnglesAt(satrec, d, g, obsGd);
+  if (!la || la.el <= 0) return null;
+  const m = moonData(d, g);
+  if (m.el <= 0) return null;
+  return { sep: angSep(la.az, la.el, m.az, m.el), la, m, d, g };
+}
+
+// 중심선까지의 지상 이동 벡터(방향+거리) 계산.
+// 관측지를 동/북으로 1km씩 미세이동시켜 위성 겉보기 위치의 야코비안을 구하고,
+// 분리각이 0이 되는 지점까지의 (동, 북) km 변위를 역산한다. 달은 멀어 위치 변화 무시.
+function centerlineVector(satrec, lat, lon, d, moonAz, moonEl, moonAngRad) {
+  const g = satellite.gstime(d);
+  const kmToLat = 1 / 111.32, kmToLon = 1 / (111.32 * Math.cos(lat * D2R));
+  const off = (la_, lo_) => {
+    const s = lookAnglesAt(satrec, d, g, { longitude: lo_ * D2R, latitude: la_ * D2R, height: 0.05 });
+    if (!s || s.el <= 0) return null;
+    let dAz = s.az - moonAz;
+    if (dAz > 180) dAz -= 360; if (dAz < -180) dAz += 360;
+    return { dx: dAz * Math.cos(moonEl * D2R), dy: s.el - moonEl };
+  };
+  const b = off(lat, lon), e = off(lat, lon + kmToLon), n = off(lat + kmToLat, lon);
+  if (!b || !e || !n) return null;
+  const a = e.dx - b.dx, bb = n.dx - b.dx, c = e.dy - b.dy, dd = n.dy - b.dy; // J (열: 동/북 1km당 변화)
+  const det = a * dd - bb * c;
+  if (Math.abs(det) < 1e-9) return null;
+  const E = (dd * -b.dx - bb * -b.dy) / det;   // 동쪽 km (음수면 서쪽)
+  const N = (-c * -b.dx + a * -b.dy) / det;    // 북쪽 km (음수면 남쪽)
+  const dist = Math.hypot(E, N);
+  const sepDeg = Math.hypot(b.dx, b.dy);
+  const kmPerDeg = sepDeg > 0.03 ? dist / sepDeg
+    : 1 / ((Math.hypot(a, c) + Math.hypot(bb, dd)) / 2);   // 정통과 부근 안정화
+  return { distKm: dist, bearingDeg: (Math.atan2(E, N) * R2D + 360) % 360,
+           pE: E, pN: N, bandHalfKm: moonAngRad * kmPerDeg };
+}
+
+async function findLunarTransits(days) {
+  if (transitRunning || !sats.length) return;
+  transitRunning = true;
+  const prog = document.getElementById("transitProg");
+  const obsGd = observerGd(), baseMs = Date.now(), endT = days * 86400;
+  const bodies = [];
+  for (const b of TRANSIT_BODIES) {
+    const sat = sats.find(s => b.re.test(s.name));
+    if (sat) bodies.push({ satrec: sat.satrec, label: b.label, span: b.span });
+  }
+  const events = [];
+  let closest = null, lastYield = performance.now();
+  const track = ev => { if (!closest || ev.sep < closest.sep) closest = ev; };
+  const yieldMaybe = async frac => {
+    if (performance.now() - lastYield > 120) {
+      prog.textContent = (lang === "ko" ? "계산 중… " : "Computing… ") + Math.round(frac * 100) + "%";
+      await new Promise(r => setTimeout(r)); lastYield = performance.now();
+    }
+  };
+
+  for (let bi = 0; bi < bodies.length; bi++) {
+    const { satrec, label, span } = bodies[bi];
+    let inPass = false, pStart = 0;
+    for (let ti = 0; ti <= endT; ti += 60) {
+      const d = new Date(baseMs + ti * 1000), g = satellite.gstime(d);
+      const la = lookAnglesAt(satrec, d, g, obsGd);
+      const up = la && la.el > 0;
+      if (up && !inPass) { inPass = true; pStart = ti; }
+      else if (!up && inPass) { inPass = false; await scanPass(satrec, label, span, obsGd, baseMs, pStart - 60, ti + 60, events, track); }
+      if (ti % 3600 === 0) await yieldMaybe((bi + ti / endT) / bodies.length);
+    }
+    if (inPass) await scanPass(satrec, label, span, obsGd, baseMs, pStart - 60, endT, events, track);
+  }
+
+  transitRunning = false;
+  prog.textContent = "";
+  events.sort((a, b) => a.t - b.t);
+  lastTransit = { events, closest, days };
+  renderTransits();
+}
+
+async function scanPass(satrec, label, span, obsGd, baseMs, t0, t1, events, track) {
+  // 달이 통과 내내 지평선 아래면 건너뛴다 (양 끝 + 중앙 표본)
+  let moonUp = false;
+  for (const tt of [t0, (t0 + t1) / 2, t1]) {
+    const m = moonData(new Date(baseMs + tt * 1000), satellite.gstime(new Date(baseMs + tt * 1000)));
+    if (m.el > -1) { moonUp = true; break; }
+  }
+  if (!moonUp) return;
+
+  // 1단계: 10초 간격으로 훑어 최근접 구간을 찾는다 (위성은 10초에 ~7° 이동하므로
+  // 진짜 통과는 이때 반드시 6° 이내로 잡힌다 → 먼 통과는 여기서 조기 탈락).
+  let c = null;
+  for (let tsec = t0; tsec <= t1; tsec += 10) {
+    const s = transitSample(satrec, obsGd, baseMs, tsec);
+    if (s && (!c || s.sep < c.sep)) c = { t: tsec, sep: s.sep };
+  }
+  if (!c || c.sep > 6) return;
+
+  // 2단계: 그 구간 ±30초를 1초 간격으로
+  let best = c;
+  for (let tsec = c.t - 30; tsec <= c.t + 30; tsec += 1) {
+    const s = transitSample(satrec, obsGd, baseMs, tsec);
+    if (s && s.sep < best.sep) best = { t: tsec, sep: s.sep };
+  }
+  if (best.sep > 3) return;
+
+  // 3단계: 0.05초 초정밀 refine
+  let r = { t: best.t, sep: best.sep, s: null };
+  for (let tsec = best.t - 1.5; tsec <= best.t + 1.5; tsec += 0.05) {
+    const s = transitSample(satrec, obsGd, baseMs, tsec);
+    if (s && s.sep < r.sep) r = { t: tsec, sep: s.sep, s };
+  }
+  const s = r.s || transitSample(satrec, obsGd, baseMs, r.t);
+  if (!s) return;
+
+  const rangeKm = s.la.range, moonAngRad = s.m.angRadDeg;
+  const s2 = transitSample(satrec, obsGd, baseMs, r.t + 0.1);
+  const speed = s2 ? angSep(s.la.az, s.la.el, s2.la.az, s2.la.el) / 0.1 : null; // 겉보기 각속도 °/s
+  const type = r.sep <= moonAngRad ? "transit" : r.sep <= moonAngRad * 1.25 ? "graze" : "near";
+  let dur = null;
+  if (speed && r.sep < moonAngRad) {
+    const half = Math.sqrt(Math.max(0, moonAngRad * moonAngRad - r.sep * r.sep));
+    dur = 2 * half / speed;
+  }
+  const cv = centerlineVector(satrec, observer.lat, observer.lon, s.d, s.m.az, s.m.el, moonAngRad);
+  const ev = {
+    label, t: new Date(baseMs + r.t * 1000), sep: r.sep, moonAngRad, type,
+    satArcsec: span / (rangeKm * 1000) * 206265, speed, dur, rangeKm,
+    moonAlt: s.m.el, moonAz: s.m.az, illum: s.m.illum, moonElong: s.m.elong, sunAlt: sunAltAt(s.d, s.g, obsGd),
+    obsLat: observer.lat, obsLon: observer.lon,
+    centerDistKm: cv ? cv.distKm : r.sep * D2R * rangeKm,
+    bearingDeg: cv ? cv.bearingDeg : null,
+    pE: cv ? cv.pE : null, pN: cv ? cv.pN : null,
+    bandHalfKm: cv ? cv.bandHalfKm : moonAngRad * D2R * rangeKm,
+  };
+  track(ev);
+  if (r.sep < 1.0) events.push(ev);
+}
+
+function fmtInstant(d) {
+  const date = d.toLocaleDateString(lang === "ko" ? "ko-KR" : "en-CA",
+    { timeZone: "Asia/Seoul", month: "2-digit", day: "2-digit", weekday: "short" });
+  const tm = d.toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB", { hour12: false, timeZone: "Asia/Seoul" });
+  return `${date} ${tm}.${Math.floor(d.getMilliseconds() / 100)}`;
+}
+
+function renderTransits() {
+  const el = document.getElementById("transitList");
+  if (!lastTransit) { el.innerHTML = ""; return; }
+  const { events, closest, days } = lastTransit;
+  const ko = lang === "ko";
+  const bodyName = lb => lb === "CSS" ? t("tiangong") : lb;
+  const skyTxt = alt => alt > 0 ? (ko ? "주간(달 보임)" : "daytime")
+    : alt > -12 ? (ko ? "박명" : "twilight") : (ko ? "야간" : "night");
+
+  const rowHtml = (e, idx) => {
+    const color = e.type === "transit" ? "var(--accent)" : e.type === "graze" ? "#7cfc9a" : "var(--dim)";
+    const badge = e.type === "transit" ? (ko ? "⭐ 트랜싯(달면 통과)" : "⭐ TRANSIT")
+      : e.type === "graze" ? (ko ? "접선 통과" : "grazing")
+      : (ko ? "근접" : "near miss");
+    const sepArc = (e.sep * 60).toFixed(1), moonR = (e.moonAngRad * 60).toFixed(1);
+    const pi = Math.round(e.moonElong / 45) % 8;
+    const phase = `${PHASE_EMOJI[pi]} ${I18N[lang].phases[pi]}`;
+    const l1 = `<b style="color:${color}">${bodyName(e.label)} · ${badge}</b> — ${fmtInstant(e.t)}`;
+    const lSep = ko ? `분리각 ${sepArc}′ (달 반경 ${moonR}′)` : `Sep ${sepArc}′ (moon r ${moonR}′)`;
+    const lMoon = ko
+      ? `달 ${phase} · 밝은면 ${(e.illum * 100).toFixed(0)}% · 고도 ${e.moonAlt.toFixed(0)}° · 방위 ${azName(e.moonAz)} ${e.moonAz.toFixed(0)}° · ${skyTxt(e.sunAlt)}`
+      : `Moon ${phase} · ${(e.illum * 100).toFixed(0)}% lit · alt ${e.moonAlt.toFixed(0)}° · az ${azName(e.moonAz)} ${e.moonAz.toFixed(0)}° · ${skyTxt(e.sunAlt)}`;
+    let lSat = ko
+      ? `위성 겉보기 크기 ${e.satArcsec.toFixed(0)}″ · 거리 ${e.rangeKm.toFixed(0)}km`
+      : `Apparent size ${e.satArcsec.toFixed(0)}″ · range ${e.rangeKm.toFixed(0)}km`;
+    if (e.dur) lSat += ko ? ` · 통과 지속 ~${e.dur.toFixed(2)}초` : ` · duration ~${e.dur.toFixed(2)}s`;
+    if (e.type !== "transit") {
+      const dir = e.bearingDeg != null ? azName(e.bearingDeg) + (ko ? "쪽" : "") : "";
+      lSat += ko ? ` · <span style="color:var(--accent)">중심선까지 ${dir} 약 ${e.centerDistKm.toFixed(1)}km 이동</span>`
+                 : ` · <span style="color:var(--accent)">move ${e.centerDistKm.toFixed(1)}km ${dir} to centerline</span>`;
+    }
+    return `<div class="pass">${l1}<br><span style="color:var(--dim)">${lSep}</span>` +
+      `<br><span style="color:var(--dim)">${lMoon}</span>` +
+      `<br><span style="color:var(--dim)">${lSat}</span>` +
+      (e.pE != null ? `<br><button class="mapBtn" data-idx="${idx}">${ko ? "🗺️ 지도에서 보기" : "🗺️ Show map"}</button>` : "") +
+      `</div>`;
+  };
+
+  const transits = events.filter(e => e.type !== "near");
+  const nears = events.filter(e => e.type === "near");
+  const list = transits.concat(nears.slice(0, 12));
+  if (!events.length && closest) list.push(closest);
+  renderTransits.rows = list; // 지도 버튼용
+
+  let html = "";
+  if (transits.length) html += transits.map((e, i) => rowHtml(e, i)).join("");
+  if (!transits.length) {
+    html += `<div style="margin-bottom:6px">${ko
+      ? `앞으로 ${days}일간 정통과가 없습니다. 가장 가까운 근접들:`
+      : `No transit in the next ${days} days. Closest approaches:`}</div>`;
+  }
+  html += nears.slice(0, 12).map((e, i) => rowHtml(e, transits.length + i)).join("");
+  if (!events.length && closest) html += rowHtml(closest, list.length - 1);
+  if (days >= 60) {
+    html += `<div style="font-size:11px;color:var(--iss);margin-top:8px;line-height:1.5">${ko
+      ? `⏳ ${days}일 앞은 궤도 데이터(TLE) 오차가 커집니다 — 특히 ISS는 궤도 재상승으로 30일 이후 예측의 시각·중심선이 크게 틀어질 수 있습니다. <b>대략적 일정 참고용</b>이며, 촬영 1~3일 전 '궤도 데이터 새로고침' 후 다시 계산하세요.`
+      : `⏳ Predictions ${days} days out have large TLE error — the ISS especially can shift by minutes/tens of km after ~30 days due to reboosts. Treat these as <b>rough planning only</b>; re-run after 'Refresh orbit data' 1–3 days before shooting.`}</div>`;
+  }
+  html += `<div style="font-size:11px;color:var(--dim);margin-top:8px;line-height:1.5">${ko
+    ? "⚠️ 트랜싯 중심선 폭은 수 km로 좁습니다. 반드시 <b>실제 촬영 위치</b>(📍 내 위치)를 설정하세요. 시각은 KST, 위성 시계(±1~2초) 오차가 있으니 30초 전부터 연속 촬영을 권합니다."
+    : "⚠️ The centerline is only a few km wide — set your <b>exact shooting spot</b> (📍 My Location). Times are KST; satellite clocks drift ±1–2 s, so start burst shooting ~30 s early."}</div>`;
+  el.innerHTML = html;
+}
+
+// ---------- 중심선·통과 띠 지도 (Leaflet, 첫 사용 때만 로딩) ----------
+let leafletP = null, mapObj = null;
+function loadLeaflet() {
+  if (leafletP) return leafletP;
+  leafletP = new Promise((res, rej) => {
+    const css = document.createElement("link");
+    css.rel = "stylesheet"; css.href = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css";
+    document.head.appendChild(css);
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js";
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return leafletP;
+}
+
+// 관측지 기준 (동쪽 km, 북쪽 km) 오프셋을 위경도로 변환
+function offToLatLng(lat, lon, Ekm, Nkm) {
+  return [lat + Nkm / 111.32, lon + Ekm / (111.32 * Math.cos(lat * D2R))];
+}
+
+async function openTransitMap(e) {
+  const ko = lang === "ko";
+  const modal = document.getElementById("mapModal");
+  document.getElementById("mapTitle").textContent =
+    `${e.label === "CSS" ? t("tiangong") : e.label} · ${fmtInstant(e.t)}`;
+  modal.classList.add("open");
+  try { await loadLeaflet(); } catch (err) {
+    document.getElementById("mapNote").textContent = ko ? "지도를 불러오지 못했습니다." : "Failed to load map.";
+    return;
+  }
+  const L = window.L;
+  if (mapObj) { mapObj.remove(); mapObj = null; }
+  document.getElementById("mapDiv").innerHTML = "";
+
+  const dist = e.centerDistKm, uE = e.pE / dist, uN = e.pN / dist; // 관측지→중심선 단위벡터
+  const vE = -uN, vN = uE;                                          // 중심선 방향(수직)
+  const C = offToLatLng(e.obsLat, e.obsLon, e.pE, e.pN);            // 중심선 위의 최근접점
+  const L1 = 45, bh = Math.max(e.bandHalfKm, 0.05);                // 중심선 길이 반, 띠 반폭
+  const linePt = k => offToLatLng(e.obsLat, e.obsLon, e.pE + vE * k, e.pN + vN * k);
+  const bandCorner = (sgn, k) => offToLatLng(e.obsLat, e.obsLon, e.pE + uE * bh * sgn + vE * k, e.pN + uN * bh * sgn + vN * k);
+
+  mapObj = L.map("mapDiv", { zoomControl: true, attributionControl: true });
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(mapObj);
+
+  L.polygon([bandCorner(1, -L1), bandCorner(1, L1), bandCorner(-1, L1), bandCorner(-1, -L1)],
+    { color: "#ffb347", weight: 1, fillColor: "#ffb347", fillOpacity: 0.18 }).addTo(mapObj);
+  L.polyline([linePt(-L1), linePt(L1)], { color: "#ffb347", weight: 2.5 }).addTo(mapObj)
+    .bindTooltip(ko ? "중심선 (정통과)" : "Centerline (dead-center)", { permanent: false });
+  L.polyline([[e.obsLat, e.obsLon], C], { color: "#7cfc9a", weight: 2, dashArray: "5,5" }).addTo(mapObj);
+  L.circleMarker([e.obsLat, e.obsLon], { radius: 7, color: "#7cfc9a", fillColor: "#7cfc9a", fillOpacity: 1 })
+    .addTo(mapObj).bindTooltip(ko ? "현재 위치" : "You", { permanent: true, direction: "top" });
+  L.circleMarker(C, { radius: 5, color: "#ffb347", fillColor: "#ffb347", fillOpacity: 1 }).addTo(mapObj);
+
+  mapObj.fitBounds(L.latLngBounds([[e.obsLat, e.obsLon], C, bandCorner(1, L1), bandCorner(-1, -L1)]).pad(0.35));
+  setTimeout(() => mapObj.invalidateSize(), 100);
+
+  const dir = e.bearingDeg != null ? azName(e.bearingDeg) : "";
+  document.getElementById("mapNote").innerHTML = e.type === "transit"
+    ? (ko ? "🟢 현재 위치가 <b>중심선(주황) 위</b>에 있어 별도 이동 없이 정통과를 촬영할 수 있습니다. 주황 띠 = 위성이 달 원반에 겹쳐 보이는 범위."
+          : "🟢 You're <b>on the centerline</b> — no travel needed. The orange band is where the satellite overlaps the Moon's disk.")
+    : (ko ? `📍 현재 위치(초록)에서 <b>${dir}쪽으로 약 ${dist.toFixed(1)}km</b> 이동해 주황 중심선에 서면 달 정중앙 통과를 볼 수 있습니다. 주황 띠 안이면 달 원반에 겹칩니다 (반폭 ~${bh.toFixed(1)}km).`
+          : `📍 From your spot (green), move <b>~${dist.toFixed(1)}km ${dir}</b> onto the orange centerline for a dead-center transit. Inside the orange band the satellite overlaps the disk (half-width ~${bh.toFixed(1)}km).`);
+}
+
+document.getElementById("transitList").addEventListener("click", ev => {
+  const btn = ev.target.closest(".mapBtn");
+  if (btn && renderTransits.rows) openTransitMap(renderTransits.rows[+btn.dataset.idx]);
+});
+document.getElementById("mapClose").addEventListener("click", () => document.getElementById("mapModal").classList.remove("open"));
+document.getElementById("mapModal").addEventListener("click", ev => {
+  if (ev.target.id === "mapModal") ev.currentTarget.classList.remove("open");
+});
+
+// ---------- 좌표 계산 ----------
+function lookAnglesAt(satrec, date, gmst, obsGd) {
+  const pv = satellite.propagate(satrec, date);
+  if (!pv?.position) return null;
+  const ecf = satellite.eciToEcf(pv.position, gmst);
+  const la = satellite.ecfToLookAngles(obsGd, ecf);
+  return { az: la.azimuth * R2D, el: la.elevation * R2D, range: la.rangeSat, eci: pv.position, ecf };
+}
+
+function observerGd() {
+  return {
+    longitude: observer.lon * D2R,
+    latitude: observer.lat * D2R,
+    height: 0.05, // km, 대략값
+  };
+}
+
+// ---------- 천구도 렌더링 ----------
+const canvas = document.getElementById("sky");
+const ctx = canvas.getContext("2d");
+let SIZE = 0;
+
+function fitCanvas() {
+  SIZE = Math.min(window.innerWidth - 40, 640);
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = SIZE * dpr; canvas.height = SIZE * dpr;
+  canvas.style.width = SIZE + "px"; canvas.style.height = SIZE + "px";
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  window.globe?.resize?.(SIZE);
+}
+window.addEventListener("resize", fitCanvas);
+
+// 하늘을 올려다보는 관점: 북쪽 위, 동쪽 왼쪽
+function project(az, el) {
+  const cx = SIZE / 2, cy = SIZE / 2, R = SIZE / 2 - 28;
+  const r = (90 - el) / 90 * R;
+  const a = az * D2R;
+  return { x: cx - r * Math.sin(a), y: cy - r * Math.cos(a) };
+}
+
+function drawChart(frame, sunEl, gmst, moon) {
+  const cx = SIZE / 2, cy = SIZE / 2, R = SIZE / 2 - 28;
+  // 하늘 배경: 태양 고도에 따라 밤/낮 색
+  const night = sunEl < -6;
+  ctx.clearRect(0, 0, SIZE, SIZE);
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, R);
+  if (night) { grad.addColorStop(0, "#0d1530"); grad.addColorStop(1, "#070b18"); }
+  else if (sunEl < 0) { grad.addColorStop(0, "#1a2348"); grad.addColorStop(1, "#2a2440"); }
+  else { grad.addColorStop(0, "#274a7a"); grad.addColorStop(1, "#16294a"); }
+  ctx.fillStyle = grad;
+  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+
+  // 고도각 원 (0°, 30°, 60°)
+  ctx.strokeStyle = "rgba(138,148,184,.35)";
+  ctx.fillStyle = "rgba(138,148,184,.7)";
+  ctx.font = "11px sans-serif"; ctx.textAlign = "left";
+  for (const el of [0, 30, 60]) {
+    const r = (90 - el) / 90 * R;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
+    if (el > 0) ctx.fillText(el + "°", cx + 3, cy - r + 12);
+  }
+  // 방위선
+  ctx.beginPath();
+  ctx.moveTo(cx - R, cy); ctx.lineTo(cx + R, cy);
+  ctx.moveTo(cx, cy - R); ctx.lineTo(cx, cy + R);
+  ctx.stroke();
+  // 방위 라벨 (하늘을 올려다보므로 동쪽이 왼쪽)
+  ctx.fillStyle = "#dde4f5"; ctx.font = "bold 14px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText(t("N"), cx, cy - R - 8);
+  ctx.fillText(t("S"), cx, cy + R + 18);
+  ctx.fillText(t("E"), cx - R - 14, cy + 5);
+  ctx.fillText(t("W"), cx + R + 14, cy + 5);
+
+  // 별자리 배경
+  if (document.getElementById("starsChk").checked && stars) {
+    for (const st of stars) {
+      const aa = raDecToAltAz(st.ra, st.dec, gmst);
+      if (aa.el < 0) continue;
+      const p = project(aa.az, aa.el);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, Math.max(0.5, 2.2 - st.mag * 0.35), 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,235,${Math.max(0.2, 0.9 - st.mag * 0.13)})`;
+      ctx.fill();
+    }
+    ctx.strokeStyle = "rgba(120,160,220,.3)"; ctx.lineWidth = 1;
+    for (const c of constLines) for (const seg of c.lines) {
+      ctx.beginPath(); let pen = false;
+      for (const [raD, decD] of seg) {
+        const aa = raDecToAltAz(raD * D2R, decD * D2R, gmst);
+        if (aa.el < 0) { pen = false; continue; }
+        const p = project(aa.az, aa.el);
+        pen ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y);
+        pen = true;
+      }
+      ctx.stroke();
+    }
+    if (constNames) {
+      ctx.fillStyle = "rgba(150,170,210,.55)"; ctx.font = "11px sans-serif"; ctx.textAlign = "center";
+      for (const n of constNames) {
+        if (n.rank > 2) continue;
+        const aa = raDecToAltAz(n.ra, n.dec, gmst);
+        if (aa.el < 10) continue;
+        const p = project(aa.az, aa.el);
+        const base = KCONST[n.id.replace(/\d/g, "")];
+        const name = lang === "ko" ? (base ? base + "자리" : n.name) : n.name;
+        if (name) ctx.fillText(name, p.x, p.y);
+      }
+    }
+  }
+
+  // 달: 경로(-1h~+2h) + 위상 렌더링 (밝은 면이 태양 방향을 향함)
+  if (moon) {
+    drawPathSeg(moon.path.filter(p => p.dt <= 0), "rgba(220,215,190,.3)", { dash: [3, 4], width: 1 });
+    drawPathSeg(moon.path.filter(p => p.dt >= 0), "rgba(245,233,200,.55)",
+      { width: 1.2, arrowEvery: 60, labelEvery: 60, labelFmt: t("hourFmt") });
+    if (moon.el > 0) {
+      const p = project(moon.az, moon.el);
+      const sp = project(moon.sunAz, Math.max(moon.sunEl, 0));
+      const th = Math.atan2(sp.y - p.y, sp.x - p.x);
+      const mr = 9, k = moon.illum;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(th);
+      ctx.beginPath(); ctx.arc(0, 0, mr, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(85,90,108,.95)"; ctx.fill();
+      ctx.beginPath();
+      ctx.arc(0, 0, mr, -Math.PI / 2, Math.PI / 2, false);
+      ctx.ellipse(0, 0, mr * Math.abs(2 * k - 1), mr, 0, Math.PI / 2, -Math.PI / 2, k <= 0.5);
+      ctx.fillStyle = "#f5e9c8"; ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = "#f5e9c8"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(t("moonName"), p.x, p.y - 14);
+    }
+  }
+
+  // 선택 위성 예측 경로: 지나온 길(회색 점선) / 갈 길(주황 실선 + 화살표)
+  if (selectedPath?.length > 1) {
+    drawPathSeg(selectedPath.filter(p => p.dt <= 0), "rgba(160,170,200,.55)", { dash: [3, 4], width: 1.2 });
+    drawPathSeg(selectedPath.filter(p => p.dt >= 0), "rgba(255,179,71,.9)",
+      { arrowEvery: 5, labelEvery: 10, labelFmt: t("minFmt") });
+  }
+
+  // 위성 점
+  for (const f of frame) {
+    const p = project(f.az, f.el);
+    f.x = p.x; f.y = p.y;
+    const isISS = /^ISS\b|ZARYA/.test(f.sat.name);
+    const isCSS = /^CSS\b|TIANHE/.test(f.sat.name);
+    const sel = f.sat.noradId === selectedId;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, isISS || isCSS ? 6 : sel ? 5 : 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = isISS ? "#ff5566" : isCSS ? "#ffb347" : f.eclipsed ? "rgba(138,148,184,.6)" : "#9fd8ff";
+    ctx.fill();
+    if (sel) {
+      ctx.strokeStyle = "#ffb347"; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 10, 0, Math.PI * 2); ctx.stroke();
+      ctx.lineWidth = 1;
+    }
+    if (isISS || isCSS || sel) {
+      ctx.fillStyle = "#fff"; ctx.font = "12px sans-serif"; ctx.textAlign = "center";
+      ctx.fillText(isISS ? "ISS" : isCSS ? "톈궁" : f.sat.name, p.x, p.y - 12);
+    }
+  }
+}
+
+// 경로 한 구간 그리기 (arrowEvery분마다 진행 방향 화살표, labelEvery분마다 시간 라벨)
+function drawPathSeg(pts, color, opts = {}) {
+  const { dash = null, width = 2, arrowEvery = 0, labelEvery = 0, labelFmt = m => `+${m}분` } = opts;
+  const proj = pts.map(p => p.el >= 0 ? project(p.az, p.el) : null);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  if (dash) ctx.setLineDash(dash);
+  ctx.beginPath();
+  let pen = false;
+  for (const q of proj) {
+    if (!q) { pen = false; continue; }
+    pen ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y);
+    pen = true;
+  }
+  ctx.stroke();
+  ctx.setLineDash([]); ctx.lineWidth = 1;
+  for (let i = 1; i < pts.length; i++) {
+    if (!proj[i] || !proj[i - 1]) continue;
+    const min = pts[i].dt / 60;
+    if (arrowEvery && min > 0 && min % arrowEvery === 0) drawArrow(proj[i - 1], proj[i], color);
+    if (labelEvery && min > 0 && min % labelEvery === 0) {
+      ctx.fillStyle = color; ctx.font = "10px sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(labelFmt(min), proj[i].x + 7, proj[i].y - 5);
+    }
+  }
+}
+
+function drawArrow(a, b, color) {
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(b.x, b.y);
+  ctx.lineTo(b.x - 8 * Math.cos(ang - 0.42), b.y - 8 * Math.sin(ang - 0.42));
+  ctx.lineTo(b.x - 8 * Math.cos(ang + 0.42), b.y - 8 * Math.sin(ang + 0.42));
+  ctx.closePath();
+  ctx.fill();
+}
+
+// ---------- 선택 위성 경로 예측 (-5분 ~ +20분) ----------
+function computePath(sat) {
+  const pts = [];
+  const now = Date.now();
+  const obsGd = observerGd();
+  for (let dt = -5 * 60; dt <= 20 * 60; dt += 30) {
+    const d = new Date(now + dt * 1000);
+    const la = lookAnglesAt(sat.satrec, d, satellite.gstime(d), obsGd);
+    if (la) pts.push({ az: la.az, el: la.el, dt });
+  }
+  return pts;
+}
+
+// ---------- 메인 루프 ----------
+function tick() {
+  if (!sats.length) return;
+  const now = new Date();
+  const gmst = satellite.gstime(now);
+  const obsGd = observerGd();
+  const sun = sunEci(now);
+
+  // 태양 고도각
+  const sunEcf = satellite.eciToEcf(sun, gmst);
+  const sunLa = satellite.ecfToLookAngles(obsGd, sunEcf);
+  const sunElDeg = sunLa.elevation * R2D;
+
+  const frame = [], all = [];
+  for (const s of sats) {
+    const la = lookAnglesAt(s.satrec, now, gmst, obsGd);
+    if (!la) continue;
+    const eclipsed = isEclipsed(la.eci, sun);
+    all.push({ id: s.noradId, name: s.name, ecf: la.ecf, eclipsed });
+    if (la.el > 0) frame.push({ sat: s, az: la.az, el: la.el, range: la.range, eclipsed });
+  }
+  frame.sort((a, b) => b.el - a.el);
+  lastFrame = frame;
+
+  // 선택 위성 경로 갱신
+  if (selectedId !== null && !selectedPath) {
+    const s = sats.find(x => x.noradId === selectedId);
+    if (s) selectedPath = computePath(s);
+  }
+
+  if (viewMode === "sky") {
+    const moon = moonData(now, gmst);
+    moon.sunAz = sunLa.azimuth * R2D;
+    moon.sunEl = sunElDeg;
+    moon.path = getMoonPath(now);
+    drawChart(frame, sunElDeg, gmst, moon);
+  } else if (window.globe?.ready) {
+    if (selectedId && !trail3D) {
+      const s = sats.find(x => x.noradId === selectedId);
+      if (s) { trail3D = computeTrail3D(s); window.globe.setTrail(trail3D); }
+    }
+    window.globe.setSun(satellite.eciToEcf(sun, gmst));
+    window.globe.update(all, selectedId);
+  }
+  renderPanel(frame, now, sunElDeg, moonData(now, gmst));
+}
+
+// 3D 모드용 궤적: ±45분(약 반 궤도씩)의 ECEF 경로
+function computeTrail3D(sat) {
+  const now = Date.now(), pts = [];
+  for (let dt = -45 * 60; dt <= 45 * 60; dt += 60) {
+    const d = new Date(now + dt * 1000);
+    const pv = satellite.propagate(sat.satrec, d);
+    if (pv?.position) pts.push({ ecf: satellite.eciToEcf(pv.position, satellite.gstime(d)), dt });
+  }
+  return pts;
+}
+
+function metaHtml(sat) {
+  const m = satMeta[sat.noradId];
+  let h = "";
+  if (m) {
+    h += `<br><span style="color:var(--dim)">${ownerName(m.owner)} · ${typeName(m.type)}` +
+      (m.launch ? ` · ${t("launched")} ${m.launch}` : "") + `</span>`;
+    if (m.period) h += `<br><span style="color:var(--dim)">${t("period")} ${m.period}${t("minUnit")} · ${t("incl")} ${m.incl}° · ${t("altKm")} ${m.per}×${m.apo} km</span>`;
+  }
+  h += `<br>${t("moreInfo")}: ` +
+    `<a target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(sat.name + " satellite")}">${t("google")}</a> · ` +
+    `<a target="_blank" rel="noopener" href="https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(sat.name)}">${t("wiki")}</a> · ` +
+    `<a target="_blank" rel="noopener" href="https://www.n2yo.com/satellite/?s=${sat.noradId}">N2YO</a>`;
+  return h;
+}
+
+function renderPanel(frame, now, sunElDeg, moon) {
+  document.getElementById("clock").textContent =
+    now.toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB", { hour12: false, timeZone: "Asia/Seoul" });
+  document.getElementById("obsInfo").textContent =
+    `${observer.name} (${t("latLbl")} ${observer.lat.toFixed(4)}°, ${t("lonLbl")} ${observer.lon.toFixed(4)}°)`;
+  const skyState = sunElDeg > 0 ? t("day") : sunElDeg > -6 ? t("twilight") : t("night");
+  document.getElementById("sunInfo").textContent =
+    `${t("sunAlt")} ${sunElDeg.toFixed(1)}° — ${skyState}` +
+    (sunElDeg < 0 && sunElDeg > -30 ? t("goodTime") : "");
+  const pi = Math.round(moon.elong / 45) % 8;
+  document.getElementById("moonInfo").textContent =
+    `${PHASE_EMOJI[pi]} ${t("moonName")} — ` +
+    (moon.el > 0 ? `${t("altLbl")} ${moon.el.toFixed(1)}° · ${azName(moon.az)}${t("dirSuffix")}` : t("below")) +
+    ` · ${I18N[lang].phases[pi]} (${t("illum")} ${(moon.illum * 100).toFixed(0)}%)`;
+  document.getElementById("count").textContent = `(${frame.length} / ${sats.length})`;
+
+  // 선택 위성 상세
+  const selEl = document.getElementById("selInfo");
+  const sel = frame.find(f => f.sat.noradId === selectedId);
+  const selSat = sats.find(s => s.noradId === selectedId);
+  if (sel) {
+    selEl.innerHTML = `<b>${sel.sat.name}</b><br>` +
+      `${t("altLbl")} ${sel.el.toFixed(1)}° · ${t("azLbl")} ${sel.az.toFixed(1)}° (${azName(sel.az)})<br>` +
+      `${t("rangeLbl")} ${sel.range.toFixed(0)} km · ` +
+      (sel.eclipsed ? `<span class="ecl">${t("eclipsedTxt")}</span>`
+                    : `<span class="vis">${t("sunlit")}${sunElDeg < -6 ? t("nakedEye") : ""}</span>`) +
+      metaHtml(sel.sat);
+  } else if (selSat) {
+    selEl.innerHTML = `<b>${selSat.name}</b><br><span class="ecl">${t("belowDetail")}</span>` +
+      metaHtml(selSat);
+  }
+
+  // 목록 (상위 100개까지만 표로)
+  const tbody = document.getElementById("satTbody");
+  document.getElementById("empty").hidden = frame.length > 0;
+  tbody.innerHTML = frame.slice(0, 100).map(f =>
+    `<tr data-id="${f.sat.noradId}" class="${f.sat.noradId === selectedId ? "sel" : ""}">` +
+    `<td>${f.sat.name}</td><td>${f.el.toFixed(0)}°</td><td>${azName(f.az)} ${f.az.toFixed(0)}°</td>` +
+    `<td>${f.range.toFixed(0)}km</td>` +
+    `<td>${f.eclipsed ? `<span class="ecl">${t("shadowS")}</span>` : `<span class="vis">${t("sunlitS")}</span>`}</td></tr>`
+  ).join("");
+}
+
+function azName(az) {
+  return I18N[lang].dirs[Math.round(az / 45) % 8];
+}
+
+function select(noradId) {
+  selectedId = String(noradId);
+  selectedPath = null; // 다음 tick에서 재계산
+  trail3D = null;
+  tick();
+}
+
+// ---------- 천구도 ↔ 3D 지구 모드 전환 ----------
+function setMode(m) {
+  if (m === "globe" && !window.globeInit) return;
+  viewMode = m;
+  document.getElementById("chartWrap").hidden = m !== "sky";
+  document.getElementById("globeWrap").hidden = m !== "globe";
+  document.getElementById("exagSel").hidden = m !== "globe";
+  document.getElementById("starsLabel").style.display = m === "globe" ? "none" : "";
+  document.getElementById("modeSky").classList.toggle("modeOn", m === "sky");
+  document.getElementById("modeGlobe").classList.toggle("modeOn", m === "globe");
+  if (m === "globe") {
+    window.globeInit(document.getElementById("globeWrap"), SIZE).then(() => {
+      window.globe.setExag(+document.getElementById("exagSel").value);
+      window.globe.setObserver(observer.lat, observer.lon, observer.name);
+      window.globe.setActive(true);
+      trail3D = null;
+      tick();
+    }).catch(() => {
+      document.getElementById("status").textContent = t("fail3d");
+    });
+  } else {
+    window.globe?.setActive?.(false);
+    tick();
+  }
+}
+document.getElementById("modeSky").addEventListener("click", () => setMode("sky"));
+document.getElementById("modeGlobe").addEventListener("click", () => setMode("globe"));
+document.getElementById("exagSel").addEventListener("change", e => {
+  if (window.globe?.ready) window.globe.setExag(+e.target.value);
+});
+
+// ---------- 이벤트 ----------
+canvas.addEventListener("click", e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  let best = null, bestD = 18;
+  for (const f of lastFrame) {
+    const d = Math.hypot(f.x - mx, f.y - my);
+    if (d < bestD) { bestD = d; best = f; }
+  }
+  if (best) select(best.sat.noradId);
+});
+
+document.getElementById("satTbody").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-id]");
+  if (tr) select(tr.dataset.id);
+});
+
+const citySel = document.getElementById("citySel");
+citySel.addEventListener("change", () => {
+  const c = CITIES[citySel.value];
+  observer = { idx: +citySel.value, name: lang === "ko" ? c[0] : c[1], lat: c[2], lon: c[3] };
+  selectedPath = null;
+  invalidateTransit();
+  if (window.globe?.ready) window.globe.setObserver(observer.lat, observer.lon, observer.name);
+  predictPasses();
+  tick();
+});
+
+document.getElementById("geoBtn").addEventListener("click", () => {
+  navigator.geolocation?.getCurrentPosition(p => {
+    observer = { idx: null, geo: true, name: t("myLocName"), lat: p.coords.latitude, lon: p.coords.longitude };
+    selectedPath = null;
+    invalidateTransit();
+    if (window.globe?.ready) window.globe.setObserver(observer.lat, observer.lon, observer.name);
+    predictPasses();
+    tick();
+  }, () => alert(t("locFail")));
+});
+
+// 달면 통과 예보 계산 (무거우므로 버튼으로 실행)
+document.getElementById("transitBtn").addEventListener("click", () => {
+  lastTransit = null;
+  findLunarTransits(+document.getElementById("transitDays").value || 14);
+});
+// 위치가 바뀌면 이전 트랜싯 결과는 무효 (트랜싯은 위치에 극도로 민감)
+function invalidateTransit() {
+  lastTransit = null;
+  document.getElementById("transitList").innerHTML =
+    `<span style="color:var(--dim);font-size:12px">${t("transitHint")}</span>`;
+}
+
+// 카테고리 변경
+document.getElementById("catSel").addEventListener("change", e => {
+  category = e.target.value;
+  localStorage.setItem("satCategory", category);
+  loadTLEs(false);
+});
+
+// 한/영 전환
+document.getElementById("langBtn").addEventListener("click", () => {
+  lang = lang === "ko" ? "en" : "ko";
+  localStorage.setItem("lang", lang);
+  applyLang();
+});
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  const set = (id, txt) => { document.getElementById(id).textContent = txt; };
+  set("appTitle", t("title"));
+  set("modeSky", t("modeSky"));
+  set("modeGlobe", t("modeGlobe"));
+  set("langBtn", t("langBtn"));
+  set("geoBtn", t("myLoc"));
+  set("tleBtn", t("refresh"));
+  set("clockHdr", t("clockHdr"));
+  set("selHdr", t("selHdr"));
+  set("passHdr", t("passHdr"));
+  set("transitHdr", t("transitHdr"));
+  set("transitBtn", t("transitBtn"));
+  const td = document.getElementById("transitDays"), tdPrev = td.value || "14";
+  td.innerHTML = [7, 14, 30, 60, 90].map(n => `<option value="${n}">${t("transitDaysOpt")(n)}</option>`).join("");
+  td.value = tdPrev;
+  if (lastTransit) renderTransits();
+  else document.getElementById("transitList").innerHTML =
+    `<span style="color:var(--dim);font-size:12px">${t("transitHint")}</span>`;
+  set("aboveTitle", t("aboveTitle"));
+  for (const th of ["thName", "thAlt", "thAz", "thRange", "thStatus"]) set(th, t(th));
+  set("legend", t("legend"));
+  set("empty", t("emptyList"));
+  document.getElementById("searchBox").placeholder = t("searchPh");
+  document.getElementById("starsLabel").childNodes[1].nodeValue = t("stars");
+  [...document.getElementById("exagSel").options].forEach(o => { o.textContent = t("altOpt")(o.value); });
+  // 카테고리 목록
+  const cs = document.getElementById("catSel");
+  cs.innerHTML = Object.entries(CATEGORIES).map(([k, c]) => `<option value="${k}">${c[lang]}</option>`).join("");
+  cs.value = category;
+  // 도시 목록
+  citySel.innerHTML = "";
+  CITIES.forEach((c, i) => citySel.add(new Option(lang === "ko" ? c[0] : c[1], i)));
+  if (observer.idx != null) { citySel.value = observer.idx; observer.name = lang === "ko" ? CITIES[observer.idx][0] : CITIES[observer.idx][1]; }
+  else if (observer.geo) observer.name = t("myLocName");
+  if (!selectedId) document.getElementById("selInfo").textContent = t("selHint");
+  if (sats.length) document.getElementById("status").textContent = t("tracking")(sats.length);
+  window.__lbl = { css: t("tiangong") }; // 3D 모듈 라벨용
+  buildCountrySel();
+  if (passes.length) renderPasses();
+  tick();
+}
+
+// 위성 검색: 국가 필터 + 클릭하면 전체 목록 드롭다운
+const searchBox = document.getElementById("searchBox");
+const searchResults = document.getElementById("searchResults");
+const countryFilter = document.getElementById("countrySel");
+
+function filteredSats() {
+  const q = searchBox.value.trim().toLowerCase();
+  let list = sats;
+  if (countryFilter.value) list = list.filter(s => satMeta[s.noradId]?.owner === countryFilter.value);
+  if (q) list = list.filter(s => s.name.toLowerCase().includes(q));
+  return [...list].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function renderSearchList() {
+  const m = filteredSats();
+  searchResults.innerHTML = m.length
+    ? m.slice(0, 300).map(s => {
+        const meta = satMeta[s.noradId];
+        const sub = meta
+          ? ` <span class="meta">${(ownerName(meta.owner) || "").split(" ")[0]} ${meta.launch ? meta.launch.slice(0, 4) : ""}</span>`
+          : "";
+        return `<div data-id="${s.noradId}">${s.name}${sub}</div>`;
+      }).join("") +
+      (m.length > 300 ? `<div style="color:var(--dim);cursor:default">${t("more")(m.length - 300)}</div>` : "")
+    : `<div style="color:var(--dim);cursor:default">${t("noResults")}</div>`;
+  searchResults.hidden = false;
+}
+
+searchBox.addEventListener("input", renderSearchList);
+searchBox.addEventListener("focus", renderSearchList);
+countryFilter.addEventListener("change", renderSearchList);
+searchBox.addEventListener("keydown", e => {
+  if (e.key === "Enter") {
+    const m = filteredSats();
+    if (m.length) { select(m[0].noradId); searchBox.value = ""; searchResults.hidden = true; }
+  }
+});
+searchResults.addEventListener("click", e => {
+  const d = e.target.closest("div[data-id]");
+  if (d) { select(d.dataset.id); searchBox.value = ""; searchResults.hidden = true; }
+});
+document.addEventListener("click", e => {
+  if (!e.target.closest("#searchWrap")) searchResults.hidden = true;
+});
+
+document.getElementById("tleBtn").addEventListener("click", () => loadTLEs(true));
+
+// 경로 예측은 30초마다 재계산 (시간이 흐르며 -5분 구간이 갱신되도록)
+setInterval(() => { selectedPath = null; trail3D = null; }, 30000);
+
+// 위성 수에 따라 갱신 주기 자동 조절 (스타링크·전체 카테고리 대응)
+let tickTimer = null;
+function scheduleTick() {
+  clearInterval(tickTimer);
+  const ms = sats.length > 5000 ? 2000 : 1000;
+  tickTimer = setInterval(tick, ms);
+}
+
+// ---------- 시작 ----------
+fitCanvas();
+applyLang();
+loadSky();
+loadTLEs(false);
+scheduleTick();
+setInterval(() => { // 시계는 항상 1초마다
+  document.getElementById("clock").textContent =
+    new Date().toLocaleTimeString(lang === "ko" ? "ko-KR" : "en-GB", { hour12: false, timeZone: "Asia/Seoul" });
+}, 1000);
+setInterval(predictPasses, 3600 * 1000); // 예보는 1시간마다 갱신
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+// ---------- 3D 지구 모드 (Three.js는 첫 진입 때만 로딩) ----------
+const EARTH_KM = 6371;
+let THREE, scene, camera, renderer, controls, sunLight;
+let earth, points, pastLine, futLine;
+let exag = 3, active = false, lastAll = [], lastSel = null, lastTrail = null;
+const markers = {}, labels = {};
+
+// ECEF(km) → 장면 좌표 (경도0°→+Z, 동경90°→+X, 북극→+Y), 고도는 exag배 과장
+function toScene(p) {
+  const r = Math.hypot(p.x, p.y, p.z);
+  const rr = 1 + Math.max(r - EARTH_KM, 0) / EARTH_KM * exag;
+  return new THREE.Vector3(p.y / r * rr, p.z / r * rr, p.x / r * rr);
+}
+
+function sphereMarker(color, radius) {
+  const m = new THREE.Mesh(
+    new THREE.SphereGeometry(radius, 12, 8),
+    new THREE.MeshBasicMaterial({ color }));
+  m.visible = false;
+  scene.add(m);
+  return m;
+}
+
+function setLabel(key, text, color, pos) {
+  let L = labels[key];
+  if (!L || L.text !== text) {
+    if (L) scene.remove(L.sprite);
+    const cv = document.createElement("canvas");
+    cv.width = 256; cv.height = 64;
+    const c = cv.getContext("2d");
+    c.font = "bold 30px sans-serif"; c.fillStyle = color; c.textAlign = "center";
+    c.shadowColor = "#000"; c.shadowBlur = 8;
+    c.fillText(text, 128, 42);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(cv), transparent: true, depthTest: false }));
+    sp.scale.set(0.55, 0.14, 1);
+    scene.add(sp);
+    L = labels[key] = { sprite: sp, text };
+  }
+  L.sprite.visible = true;
+  L.sprite.position.copy(pos).add(new THREE.Vector3(0, 0.08, 0));
+}
+function hideLabel(key) { if (labels[key]) labels[key].sprite.visible = false; }
+function place(m, v) { m.visible = !!v; if (v) m.position.copy(v); }
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (!active) return;
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+window.globeInit = async function (container, size) {
+  if (window.globe.ready) { window.globe.resize(size); return; }
+  THREE = await import("three");
+  const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+
+  scene = new THREE.Scene();
+  camera = new THREE.PerspectiveCamera(45, 1, 0.05, 100);
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setPixelRatio(window.devicePixelRatio || 1);
+  renderer.setSize(size, size);
+  container.appendChild(renderer.domElement);
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.minDistance = 1.3;
+  controls.maxDistance = 8;
+
+  // 지구 (텍스처 로딩 실패 시 파란 구 + 격자만으로 동작)
+  const mat = new THREE.MeshPhongMaterial({ color: 0x33558a, shininess: 8 });
+  new THREE.TextureLoader().load(
+    "https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/earth_atmos_2048.jpg",
+    t => { t.colorSpace = THREE.SRGBColorSpace; mat.map = t; mat.color.set(0xffffff); mat.needsUpdate = true; });
+  earth = new THREE.Mesh(new THREE.SphereGeometry(1, 64, 48), mat);
+  earth.rotation.y = -Math.PI / 2; // 텍스처 경도 0°를 장면 +Z(ECEF x축)에 정렬
+  scene.add(earth);
+  scene.add(new THREE.LineSegments(
+    new THREE.WireframeGeometry(new THREE.SphereGeometry(1.002, 24, 16)),
+    new THREE.LineBasicMaterial({ color: 0x88aadd, transparent: true, opacity: 0.07 })));
+
+  sunLight = new THREE.DirectionalLight(0xffffff, 1.7);
+  scene.add(sunLight, new THREE.AmbientLight(0x8899bb, 0.55));
+
+  // 국경·해안선 윤곽 (world-atlas 110m) — 실패해도 지구본은 동작
+  (async () => {
+    try {
+      const topojson = await import("https://cdn.jsdelivr.net/npm/topojson-client@3/+esm");
+      const topo = await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(r => r.json());
+      const mesh = topojson.mesh(topo, topo.objects.countries);
+      const D2R = Math.PI / 180, BR = 1.003;
+      const pos = [];
+      const toV = (lon, lat) => {
+        const cp = Math.cos(lat * D2R);
+        return [cp * Math.sin(lon * D2R) * BR, Math.sin(lat * D2R) * BR, cp * Math.cos(lon * D2R) * BR];
+      };
+      for (const line of mesh.coordinates) {
+        for (let i = 0; i < line.length - 1; i++) {
+          pos.push(...toV(line[i][0], line[i][1]), ...toV(line[i + 1][0], line[i + 1][1]));
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pos), 3));
+      scene.add(new THREE.LineSegments(g,
+        new THREE.LineBasicMaterial({ color: 0x9fd0f0, transparent: true, opacity: 0.45 })));
+    } catch (e) { /* 윤곽선 없이 동작 */ }
+  })();
+
+  // 위성 점들 (카테고리에 따라 수만 개까지 — 버퍼는 필요 시 확장)
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute("position", new THREE.BufferAttribute(new Float32Array(3000), 3));
+  pg.setAttribute("color", new THREE.BufferAttribute(new Float32Array(3000), 3));
+  pg.setDrawRange(0, 0);
+  points = new THREE.Points(pg, new THREE.PointsMaterial({ size: 0.03, vertexColors: true }));
+  scene.add(points);
+
+  // 선택 위성 궤적 (지나온 길 / 갈 길)
+  pastLine = new THREE.Line(new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: 0x9aa3c0, transparent: true, opacity: 0.55 }));
+  futLine = new THREE.Line(new THREE.BufferGeometry(),
+    new THREE.LineBasicMaterial({ color: 0xffb347 }));
+  scene.add(pastLine, futLine);
+
+  markers.obs = sphereMarker(0xffd24a, 0.015);
+  markers.iss = sphereMarker(0xff5566, 0.024);
+  markers.css = sphereMarker(0xffb347, 0.022);
+  markers.sel = sphereMarker(0x7cfc9a, 0.018);
+
+  // 클릭으로 위성 선택 (드래그와 구분)
+  const ray = new THREE.Raycaster();
+  ray.params.Points.threshold = 0.05;
+  let downAt = null;
+  renderer.domElement.addEventListener("pointerdown", e => { downAt = [e.clientX, e.clientY]; });
+  renderer.domElement.addEventListener("pointerup", e => {
+    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+    const rect = renderer.domElement.getBoundingClientRect();
+    const nd = new THREE.Vector2(
+      ((e.clientX - rect.left) / rect.width) * 2 - 1,
+      -((e.clientY - rect.top) / rect.height) * 2 + 1);
+    ray.setFromCamera(nd, camera);
+    const hit = ray.intersectObject(points)
+      .filter(h => h.index < lastAll.length)
+      .sort((a, b) => a.distanceToRay - b.distanceToRay)[0];
+    if (hit) window.select(lastAll[hit.index].id);
+  });
+
+  window.globe.ready = true;
+  animate();
+};
+
+window.globe = {
+  ready: false,
+  setActive(b) { active = b; },
+  resize(size) { if (renderer) renderer.setSize(size, size); },
+  setExag(v) {
+    exag = v;
+    if (lastTrail) this.setTrail(lastTrail);
+    if (lastAll.length) this.update(lastAll, lastSel);
+  },
+  setSun(ecf) {
+    const d = Math.hypot(ecf.x, ecf.y, ecf.z);
+    sunLight.position.set(ecf.y / d, ecf.z / d, ecf.x / d).multiplyScalar(10);
+  },
+  setObserver(lat, lon, name) {
+    const ecf = satellite.geodeticToEcf({ longitude: lon * Math.PI / 180, latitude: lat * Math.PI / 180, height: 0 });
+    const v = toScene(ecf);
+    place(markers.obs, v);
+    setLabel("obs", name, "#ffd24a", v);
+    camera.position.copy(v).normalize().multiplyScalar(2.8);
+    camera.lookAt(0, 0, 0);
+  },
+  setTrail(pts) {
+    lastTrail = pts;
+    pastLine.geometry.setFromPoints(pts.filter(p => p.dt <= 0).map(p => toScene(p.ecf)));
+    futLine.geometry.setFromPoints(pts.filter(p => p.dt >= 0).map(p => toScene(p.ecf)));
+  },
+  update(all, selectedId) {
+    if (!this.ready) return;
+    lastAll = all; lastSel = selectedId;
+    if (!selectedId) { pastLine.visible = futLine.visible = false; }
+    else pastLine.visible = futLine.visible = true;
+    if (all.length > points.geometry.attributes.position.count) {
+      const cap = Math.ceil(all.length * 1.2);
+      points.geometry.setAttribute("position", new THREE.BufferAttribute(new Float32Array(cap * 3), 3));
+      points.geometry.setAttribute("color", new THREE.BufferAttribute(new Float32Array(cap * 3), 3));
+    }
+    const pos = points.geometry.attributes.position;
+    const col = points.geometry.attributes.color;
+    let issP = null, cssP = null, selP = null, selName = null, selIsStation = false;
+    all.forEach((a, i) => {
+      const v = toScene(a.ecf);
+      pos.setXYZ(i, v.x, v.y, v.z);
+      a.eclipsed ? col.setXYZ(i, 0.42, 0.47, 0.62) : col.setXYZ(i, 0.62, 0.85, 1);
+      const isISS = /^ISS\b|ZARYA/.test(a.name), isCSS = /^CSS\b|TIANHE/.test(a.name);
+      if (isISS && !issP) issP = v;
+      if (isCSS && !cssP) cssP = v;
+      if (a.id === selectedId) { selP = v; selName = a.name; selIsStation = isISS || isCSS; }
+    });
+    points.geometry.setDrawRange(0, all.length);
+    pos.needsUpdate = col.needsUpdate = true;
+    place(markers.iss, issP);
+    issP ? setLabel("iss", "ISS", "#ff5566", issP) : hideLabel("iss");
+    place(markers.css, cssP);
+    cssP ? setLabel("css", (window.__lbl?.css) || "톈궁", "#ffb347", cssP) : hideLabel("css");
+    place(markers.sel, selIsStation ? null : selP);
+    (selP && !selIsStation) ? setLabel("sel", selName, "#7cfc9a", selP) : hideLabel("sel");
+  },
+};
+</script>
+</body>
+</html>
